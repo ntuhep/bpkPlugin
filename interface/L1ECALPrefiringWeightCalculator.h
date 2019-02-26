@@ -16,7 +16,7 @@ class L1ECALPrefiringWeightCalculator{
         ~L1ECALPrefiringWeightCalculator();
 
         void Calculation (const PhotonInfoBranches& photons, const JetInfoBranches& jets);
-        double GetPrefiringWeight(const std::string& type = "Contral") { return _weight[type]; }
+        double GetPrefiringWeight(const std::string& type = "Central") { return _weight[type]; }
 
     private:
 
