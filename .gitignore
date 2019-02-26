@@ -14,3 +14,14 @@
 *.log
 log*
 .remote-sync.json
+
+# Specific file exclusion
+# [relative/path/to/file]
+
+test/hlt.py
+python/__init__.py
+interface/makeHeaders/format.h
+interface/makeHeaders/TriggerBooking.h
+
+# Specific file inclusion
+# ![relative/path/to/file]
