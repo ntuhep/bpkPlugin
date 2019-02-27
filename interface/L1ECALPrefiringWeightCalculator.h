@@ -21,7 +21,7 @@ class L1ECALPrefiringWeightCalculator{
         L1ECALPrefiringWeightCalculator(const std::string& L1Maps, const std::string& DataEra, bool UseJetEMPt = false, const double& PrefiringRateSystematicUncty = 0.2);
         ~L1ECALPrefiringWeightCalculator();
 
-        void Calculation (const PhotonInfoBranches& photons, const JetInfoBranches& jets);
+        void Calculation (const LepInfoBranches& leptons, const JetInfoBranches& jets);
         double GetPrefiringWeight(const std::string& type = "Central") { return _weight[type]; }
 
     private:
@@ -60,7 +60,7 @@ L1ECALPrefiringWeightCalculator::~L1ECALPrefiringWeightCalculator()
 }
 
 void 
-L1ECALPrefiringWeightCalculator::Calculation(const PhotonInfoBranches& photons, const JetInfoBranches& jets)
+L1ECALPrefiringWeightCalculator::Calculation(const LepInfoBranches& leptons, const JetInfoBranches& jets)
 {
     _weight.clear();
 
@@ -69,19 +69,22 @@ L1ECALPrefiringWeightCalculator::Calculation(const PhotonInfoBranches& photons, 
     double NonPrefiringProb[3] = {1., 1., 1.}; //0: central, 1: up, 2: down
 
     for (int flag = 0; flag < 3; flag++) {
-        std::vector<int> involvedPho_index;
+        std::vector<int> involvedEle_index;
 
-        //Now applying the prefiring maps to photons in the involved regions. 
-        for (int i = 0; i < photons.Size; i++) {
-            double pho_pt  = photons.Pt[i];
-            double pho_eta = photons.Eta[i];
+        //Now applying the prefiring maps to electrons in the involved regions. 
+        for (int i = 0; i < leptons.Size; i++) {
+            //Pick up electrons
+            if (leptons.LeptonType[i] != 11) continue;
 
-            if (pho_pt < 20.) continue;
-            if (fabs(pho_eta) < 2. || fabs(pho_eta) > 3.) continue;
-            involvedPho_index.push_back(i);
+            double ele_pt  = leptons.Pt[i];
+            double ele_eta = leptons.Eta[i];
 
-            double PrefiringProb_photon = GetPrefiringRate(pho_pt, pho_eta, _h_prefmap_photon, flag);
-            NonPrefiringProb[flag] *= (1. - PrefiringProb_photon);
+            if (ele_pt < 20.) continue;
+            if (fabs(ele_eta) < 2. || fabs(ele_eta) > 3.) continue;
+            involvedEle_index.push_back(i);
+
+            double PrefiringProb_electron = GetPrefiringRate(ele_pt, ele_eta, _h_prefmap_photon, flag);
+            NonPrefiringProb[flag] *= (1. - PrefiringProb_electron);
         }
 
         //Now applying the prefiring maps to jets in the involved regions. 
@@ -93,21 +96,21 @@ L1ECALPrefiringWeightCalculator::Calculation(const PhotonInfoBranches& photons, 
             if (jet_pt < 20) continue;
             if (fabs(jet_eta) < 2. || fabs(jet_eta) > 3.) continue;
 
-            //Loop over photons to remove overlap
-            double NonPrefiringProb_OverLappingPhoton = 1.;
-            for (int i_pho = 0; i_pho < (int)involvedPho_index.size(); i_pho++) {
-                double pho_pt  = photons.Pt[involvedPho_index[i_pho]];
-                double pho_eta = photons.Eta[involvedPho_index[i_pho]];
-                double pho_phi = photons.Phi[involvedPho_index[i_pho]];
+            //Loop over electrons to remove overlap
+            double NonPrefiringProb_OverLappingElectron = 1.;
+            for (int i_ele = 0; i_ele < (int)involvedEle_index.size(); i_ele++) {
+                double ele_pt  = leptons.Pt[involvedEle_index[i_ele]];
+                double ele_eta = leptons.Eta[involvedEle_index[i_ele]];
+                double ele_phi = leptons.Phi[involvedEle_index[i_ele]];
 
-                TLorentzVector jet, pho;
-                pho.SetPtEtaPhiM(0.1, pho_eta, pho_phi, 0); // 0.1 is dummy value, we only care about direction
+                TLorentzVector jet, ele;
+                ele.SetPtEtaPhiM(0.1, ele_eta, ele_phi, 0); // 0.1 is dummy value, we only care about direction
                 jet.SetPtEtaPhiM(0.1, jet_eta, jet_phi, 0.1);
-                double dR = pho.DeltaR(jet);
+                double dR = ele.DeltaR(jet);
                 if (dR > 0.4) continue;
 
-                double PrefiringProb_photon =  GetPrefiringRate(pho_pt, pho_eta, _h_prefmap_photon, flag);
-                NonPrefiringProb_OverLappingPhoton *= (1. - PrefiringProb_photon);
+                double PrefiringProb_electron =  GetPrefiringRate(ele_pt, ele_eta, _h_prefmap_photon, flag);
+                NonPrefiringProb_OverLappingElectron *= (1. - PrefiringProb_electron);
             }
 
             double jet_ptem = jet_pt * (jets.CEF[i] + jets.NEF[i]);
@@ -115,17 +118,17 @@ L1ECALPrefiringWeightCalculator::Calculation(const PhotonInfoBranches& photons, 
                                                    : GetPrefiringRate(jet_pt,   jet_eta, _h_prefmap_jet, flag);
             double NonPrefiringProb_OverLappingJet = (1. - PrefiringProb_jet); 
 
-            //If there are no overlapping photons, just multiply by the jet non prefiring rate
-            if (NonPrefiringProb_OverLappingPhoton == 1.) NonPrefiringProb[flag] *= NonPrefiringProb_OverLappingJet;
+            //If there are no overlapping electrons, just multiply by the jet non prefiring rate
+            if (NonPrefiringProb_OverLappingElectron == 1.) NonPrefiringProb[flag] *= NonPrefiringProb_OverLappingJet;
 
-            //If overlapping photons have a non prefiring rate larger than the jet, then replace these weights by the jet one
-            else if (NonPrefiringProb_OverLappingPhoton > NonPrefiringProb_OverLappingJet) {
-                if (NonPrefiringProb_OverLappingPhoton != 0.) NonPrefiringProb[flag] *= NonPrefiringProb_OverLappingJet / NonPrefiringProb_OverLappingPhoton;
+            //If overlapping electrons have a non prefiring rate larger than the jet, then replace these weights by the jet one
+            else if (NonPrefiringProb_OverLappingElectron > NonPrefiringProb_OverLappingJet) {
+                if (NonPrefiringProb_OverLappingElectron != 0.) NonPrefiringProb[flag] *= NonPrefiringProb_OverLappingJet / NonPrefiringProb_OverLappingElectron;
                 else NonPrefiringProb[flag] = 0.;
             } 
 
-            //If overlapping photons have a non prefiring rate smaller than the jet, don't consider the jet in the event weight
-            else if(NonPrefiringProb_OverLappingPhoton < NonPrefiringProb_OverLappingJet) NonPrefiringProb[flag] = 1.;
+            //If overlapping electrons have a non prefiring rate smaller than the jet, don't consider the jet in the event weight
+            else if(NonPrefiringProb_OverLappingElectron < NonPrefiringProb_OverLappingJet) NonPrefiringProb[flag] = 1.;
         }
 
     }
