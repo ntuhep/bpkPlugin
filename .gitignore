@@ -10,7 +10,6 @@
 
 # General data file exclusions
 *.txt
-*.root
 *.log
 log*
 .remote-sync.json
